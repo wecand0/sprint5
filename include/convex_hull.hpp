@@ -1,8 +1,5 @@
 #pragma once
 #include "geometry.hpp"
-#include <algorithm>
-#include <ranges>
-#include <stack>
 #include <vector>
 
 namespace geometry::convex_hull {
@@ -11,6 +8,8 @@ double CrossProduct(Point2D p1, Point2D middle, Point2D p2);
 
 class StackForGrahamScan {
 public:
+    StackForGrahamScan(size_t size) { s.reserve(size); }
+
     void Push(const Point2D &p) { s.push_back(p); }
     void Pop() { s.pop_back(); }
 
@@ -24,6 +23,6 @@ private:
     std::vector<Point2D> s;
 };
 
-GeometryResult<std::vector<Point2D>> GrahamScan(ReplaceMe points);
+GeometryResult<std::vector<Point2D>> GrahamScan(std::span<const Point2D> points);
 
 }  // namespace geometry::convex_hull
