@@ -11,7 +11,7 @@ struct Multilambda : Ts... {
     using Ts::operator()...;
 };
 
-void Draw(std::span<geometry::Shape> shapes) {
+void Draw(std::span<const geometry::Shape> shapes) {
     using namespace geometry;
     using namespace matplot;
 
@@ -22,7 +22,7 @@ void Draw(std::span<geometry::Shape> shapes) {
     f->size(900, 900);
 
     hold(on);     // Multiple plots mode
-    axis(equal);  // Square view
+    axis(equal);  // Squre view
     grid(on);     // Enable grid by default
 
     for (const auto &[index, shape] : std::ranges::views::enumerate(shapes)) {
@@ -63,7 +63,7 @@ void Draw(std::span<geometry::Shape> shapes) {
     f->show();
 }
 
-void Draw(std::span<geometry::triangulation::DelaunayTriangle> triangles) {
+void Draw(std::span<const geometry::triangulation::DelaunayTriangle> triangles) {
     using namespace geometry;
     using namespace matplot;
 

@@ -15,66 +15,105 @@ using namespace geometry;
 namespace rng = std::ranges;
 namespace views = std::ranges::views;
 
-void PrintAllIntersections(const Shape &shape, ReplaceMe others) {
+void PrintAllIntersections(const Shape &shape, std::span<const Shape> others) {
     std::println("\n=== Intersections ===");
 
-    /*
-     * Используйте ranges чтобы оставить только фигуры,
-     * поддерживающие возможность находить пересечения между собой
-     *
-     * Затем примените монадический интерфейс для обработки результатов:
-     *     - Пересечение найдено в точке A между фигурами B и C
-     *     - Фигуры B и C не пересекаются
-     */
+    rng::for_each(others | views::filter([&shape](const auto &other) { return &other != &shape; }),
+                  [&](const Shape &other) {
+                      try {
+                          if (auto pt = intersections::GetIntersectPoint(shape, other)) {
+                              std::println("  - {} vs {}: FOUND at {}", shape, other, *pt);
+                          }
+                      } catch (const std::logic_error &) {
+                      }
+                  });
 }
 
-void PrintDistancesFromPointToShapes(Point2D p, ReplaceMe shapes) {
+void PrintDistancesFromPointToShapes(Point2D p, std::span<const Shape> shapes) {
     std::println("\n=== Distance from Point Test ===");
-    std::println("Testing point: {} ", p);
+    std::println("  testing point: {} ", p);
 
-    /*
-     * Используйте ranges чтобы выбрать любые 5 фигур из списка.
-     * Затем найдите расстояния от заданной точки до всех выбранных фигур.
-     * Выведите результат в формате "Расстояние от точки P до фигуры S равно D"
-     */
+    rng::for_each(shapes | views::take(5), [&p](const Shape &shape) {
+        std::println("    - dist from {} to {}: {:.2f}", p, shape, queries::DistanceToPoint(shape, p));
+    });
 }
 
-void PerformShapeAnalysis(ReplaceMe shapes) {
+void PerformShapeAnalysis(std::span<const Shape> shapes) {
     std::println("\n=== Shape Analysis ===");
 
-    /*
-     * Используйте ranges и созданные классы чтобы:
-     *     - Найти все пересечения между фигурами используя метод Bounding Box
-     *     - Найти самую высокую фигуру (чья высота наибольшая)
-     *     - Вывести расстояние между любыми двумя фигурами, которые поддерживают данную функциональность
-     */
+    std::println("  bounding box collisions:");
+    auto colliding_pairs = views::cartesian_product(shapes, shapes) | views::filter([](const auto &pair) {
+                               auto &[s1, s2] = pair;
+                               return &s1 < &s2 && queries::BoundingBoxesOverlap(s1, s2);
+                           });
+    rng::for_each(colliding_pairs, [](const auto &pair) {
+        auto &[s1, s2] = pair;
+        std::println("    - {} and {}", s1, s2);
+    });
+
+    if (auto it = rng::max_element(shapes, {}, &queries::GetHeight); it != shapes.end()) {
+        std::println("  highest: {} (h={:.2f})", *it, queries::GetHeight(*it));
+    }
+
+    auto supported_dist = views::cartesian_product(shapes, shapes) | views::filter([](const auto &pair) {
+                              auto &[s1, s2] = pair;
+                              return &s1 < &s2;
+                          }) |
+                          views::transform([](const auto &pair) {
+                              auto &[s1, s2] = pair;
+                              return std::tuple{s1, s2, queries::DistanceBetweenShapes(s1, s2)};
+                          }) |
+                          views::filter([](const auto &tuple) {
+                              auto &dist = std::get<2>(tuple);
+                              return dist.has_value();
+                          }) |
+                          views::take(1);
+
+    if (!supported_dist.empty()) {
+        std::println("  sample distance:");
+        rng::for_each(supported_dist, [](const auto &tuple) {
+            auto &[s1, s2, dist] = tuple;
+            std::println("    - {} vs {}: dist={:.2f}", s1, s2, *dist);
+        });
+    }
 }
 
 void PerformExtraShapeAnalysis(std::span<const Shape> shapes) {
     std::println("\n=== Shape Extra Analysis ===");
 
-    /*
-     * Используйте ranges и созданные классы чтобы:
-     *     - Вывести 3 любые фигуры, которые находятся выше 50.0
-     *     - Вывести фигуры с наименьшей и с наибольшей высотами
-     */
+    auto high_shapes = shapes |
+                       views::filter([](const auto &shape) { return queries::GetBoundBox(shape).min_y > 50.0; }) |
+                       views::take(3);
+
+    if (!high_shapes.empty()) {
+        std::println("  shapes above y=50.0:");
+        rng::for_each(high_shapes, [](const auto &shape) { std::println("    - {}", shape); });
+    }
+
+    if (!shapes.empty()) {
+        auto [min_it, max_it] = rng::minmax_element(shapes, {}, &queries::GetHeight);
+        std::println("  min/max height:");
+        std::println("    - min: {} (h={:.2f})", *min_it, queries::GetHeight(*min_it));
+        std::println("    - max: {} (h={:.2f})", *max_it, queries::GetHeight(*max_it));
+    }
 }
 
 int main() {
     utils::ShapeGenerator generator(-50.0, 50.0, 5.0, 25.0);
-
-    //
-    // После реализации всех фигур, замените GenerateTriangles на GenerateShapes
-    //
-    std::vector<Shape> shapes = generator.GenerateTriangles(15);
+    std::vector<Shape> shapes = generator.GenerateShapes(15);
 
     std::println("Generated {} random shapes", shapes.size());
 
     // Выведите индекс каждой фигуры и её высоту
+    rng::for_each(views::enumerate(shapes), [](const auto &indexed_shape) {
+        auto [index, shape] = indexed_shape;
+        std::println(" [{:2}] h={:5.2f}, {}", index, queries::GetHeight(shape), shape);
+    });
 
     //
     // Вызываем разработанные функции
     //
+    assert(!shapes.empty());
     PrintAllIntersections(shapes[0], shapes);
 
     PrintDistancesFromPointToShapes(Point2D{10.0, 10.0}, shapes);
@@ -93,9 +132,22 @@ int main() {
     //
     // Формируем список из вершин всех фигур
     //
-    std::vector<Point2D> points;
 
-    /* ваш код здесь */
+    std::vector<Point2D> points;
+    {
+
+        auto all_vertices_view = shapes | views::transform([](const Shape &shape) {
+                                     return std::visit(
+                                         [](const auto &shape) {
+                                             const auto vts = shape.Vertices();
+                                             std::vector<Point2D> pts(std::begin(vts), std::end(vts));
+                                             return pts;
+                                         },
+                                         shape);
+                                 }) |
+                                 views::join;
+        rng::copy(all_vertices_view, std::back_inserter(points));
+    }
 
     //
     // Находим список точек, для построения выпуклой оболочки - convex hull - алгоритмом Грэхема
@@ -103,7 +155,12 @@ int main() {
     // Рисуем все фигуры
     //
 
-    /* ваш код здесь */
+    if (auto hull_result = geometry::convex_hull::GrahamScan(points)) {
+        shapes.push_back(geometry::Polygon(*hull_result));
+        geometry::visualization::Draw(shapes);
+    } else {
+        std::println("Error {}", static_cast<int>(hull_result.error()));
+    }
 
     //
     // после изучения графика - нажмите Enter чтобы продолжить выполнение и построить 3ий график
@@ -112,13 +169,12 @@ int main() {
     {
         std::vector<Point2D> points = {{0, 0}, {10, 0}, {5, 8}, {15, 5}, {2, 12}};
 
-        //
-        // Используйте список точек points или свой, чтобы
-        // выполнить алгоритм триангуляции Делоне алгоритмом Боуэра-Ватсона
-        //
-        // После успешного завершения алгоритма - выведите результат для проверки
-        // используя geometry::visualization::Draw
-        //
+        if (auto triangulation_result = geometry::triangulation::DelaunayTriangulation(points)) {
+            geometry::visualization::Draw(triangulation_result.value());
+        } else {
+            std::println("Error {}", static_cast<int>(triangulation_result.error()));
+        }
     }
+
     return 0;
 }

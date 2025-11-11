@@ -1,6 +1,7 @@
 #pragma once
 #include "geometry.hpp"
 #include "queries.hpp"
+#include <optional>
 #include <print>
 #include <random>
 #include <ranges>
@@ -55,22 +56,6 @@ public:
         return shapes;
     }
 
-    std::vector<Shape> GenerateTriangles(size_t count) {
-        std::vector<Shape> shapes;
-        shapes.reserve(count);
-
-        for (auto _ : std::views::iota(0u, count)) {
-            Point2D center{coord_dist(gen), coord_dist(gen)};
-            double size = size_dist(gen);
-            Point2D a{center.x, center.y};
-            Point2D b{center.x + size, center.y};
-            Point2D c{center.x + size / 2, center.y + size};
-            shapes.push_back(Triangle{a, b, c});
-        }
-
-        return shapes;
-    }
-
 private:
     std::mt19937 gen;
     std::uniform_real_distribution<double> coord_dist;
@@ -79,27 +64,31 @@ private:
     std::uniform_int_distribution<int> type_dist;
 };
 
-std::vector<std::pair<Shape, Shape>> FindAllCollisions(ReplaceMe shapes) {
-    std::vector<std::pair<Shape, Shape>> collisions;
-
-    /*
-     * Используйте библиотеку ranges, чтобы найти все коллизии между фигурами методом BoundingBoxesOverlap
-     *
-     * Также используйте наиболее эффективный метод добавления объектов в collisions
-     */
+inline std::vector<std::pair<Shape, Shape>> FindAllCollisions(std::span<const Shape> shapes) {
+    // clang-format off
+    auto collisions = std::views::cartesian_product(shapes, shapes) | 
+                      std::views::filter([](const auto &t) {
+                          auto &[s1, s2] = t;
+                          return &s1 < &s2 && queries::BoundingBoxesOverlap(s1, s2);
+                      }) |
+                      std::views::transform([](auto &&t) {
+                          // tuple => pair
+                          auto &&[s1, s2] = std::move(t);
+                          return std::pair{std::move(s1), std::move(s2)};  
+                      }) |
+                      std::ranges::to<std::vector>();
+    // clang-format on
 
     return collisions;
 }
 
-std::optional<size_t> FindHighestShape(ReplaceMe shapes) {
+inline std::optional<size_t> FindHighestShape(std::span<const Shape> shapes) {
+    auto it = std::ranges::max_element(shapes, {}, &queries::GetHeight);
+    if (it == shapes.end()) {
+        return std::nullopt;
+    }
 
-    /*
-     * Используйте библиотеку ranges, чтобы найти самую высокую фигуру
-     *
-     * Важно: использование ручной итерации по фигурам не разрешается
-     */
-
-    return std::nullopt;
+    return std::ranges::distance(shapes.begin(), it);
 }
 
 }  // namespace geometry::utils
